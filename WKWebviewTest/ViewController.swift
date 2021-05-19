@@ -25,6 +25,7 @@
 
 import UIKit
 import WebKit
+import SafariServices
 
 class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
     var webView: WKWebView!
@@ -98,7 +99,11 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
     }
     
     @IBAction func printCookiesAction(_ sender: Any) {
-        printCookies()
+//        printCookies()
+//        reloadJavascript();
+        
+        runEventOverwrite();
+
     }
     
     func printCookies() {
@@ -112,7 +117,9 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
     
     
     @IBAction func clearCookiesAction(_ sender: Any) {
-        clearCookies(completionHander: {})
+//        clearCookies(completionHander: {})
+        runSubmit()
+    
     }
     
     // COOKIE BEHAVIOR SUMMARY WITH WKWEBVIEW
@@ -259,8 +266,9 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
     
     func createWebview() {
         let webConfiguration = WKWebViewConfiguration()
+        webConfiguration.applicationNameForUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"
         
-        if (self.blockData) {
+        if (true) {
             WKContentRuleListStore.default()?.lookUpContentRuleList(forIdentifier: CONTENT_RULE_LIST_NAME, completionHandler: {contentRuleList, error in
                 if contentRuleList != nil {
                     webConfiguration.userContentController.add(contentRuleList!)
@@ -273,7 +281,132 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
         }
     }
         
+    struct UrlSessionRequestOptions {
+           var cookies: String?
+           var userAgent: String?
+       }
+       
+    func runSubmit() {
+        let js = """
+            var inputs = {
+                'input[formcontrolname="userid"]': "dogg",
+                'input[formcontrolname="password"]': "1Doggggg",
+                'input[formcontrolname="confpassword"]': "1Doggggg",
+                'input[formcontrolname="email"]': "fake@fake.com",
+                'input[formcontrolname="firstName"]': "dog",
+                'input[formcontrolname="lastName"]': "dog",
+                'input[formcontrolname="phoneNumber"]': "1111111111",
+            }
+            var submitSelector = ".stAdd"
+            var inp;
+            for (selector in inputs) {
+                inp = document.querySelector(selector);
+                inp.dispatchEvent(new Event('click'));
+                inp.dispatchEvent(new Event('focus'));
+                inp.value = inputs[selector];
+                inp.dispatchEvent(new Event('input'));
+                inp.dispatchEvent(new Event('blur'));
+            }
+            // This insanity is necessary to trick angular/ionic into accepting clicks.
+            // Otherwise, it swallows all click events until a real tap on the page.
+            var evt = new MouseEvent('click', {
+                bubbles: true,
+                cancelable: false,
+                view: window,
+                dispatchClick: 1,
+            });
+            evt.preventDefault = function() {
+                console.log('Swallow preventDefault');
+            };
+            evt.stopPropagation = function() {
+                console.log('Swallow stopPropagation')
+            };
+            evt.stopImmediatePropagation = function() {
+                console.log('Swallow stopImmediatePropagation');
+            };
+            submit = document.querySelector(submitSelector);
+            submit.dispatchEvent(evt);
+        """
+        self.webView.evaluateJavaScript(js, completionHandler: { returnVal, error in
+            print("hey");
+        })
+    }
+    
+    func runEventOverwrite() {
+        let js = """
+            Element.prototype._addEventListener = Element.prototype.addEventListener;
+            Element.prototype.addEventListener = function() {
+                let args = [...arguments]
+                let temp = args[1];
+                args[1] = function() {
+                    let args2 = [...arguments];
+                    args2[0] = Object.assign({}, args2[0])
+                    args2[0].isTrusted = true;
+                    return temp(...args2);
+                }
+                return this._addEventListener(...args);
+            }
+        """
+        self.webView.evaluateJavaScript(js, completionHandler: { returnVal, error in
+            print("hey");
+        })
+    }
+
+    func reloadJavascript() {
+        makeURLSessionRequest(createRequest(urlString: "https://cardholder.ebtedge.com/chp/build/main.js", method: "GET"), requestOptions: UrlSessionRequestOptions(), completionHandler: { url, data, response, error in
+            if (error == nil) {
+                let jsString = String(data: data!, encoding: .utf8);
+                if (jsString != nil) {
+                    let removedIsTrusted = jsString!.replacingOccurrences(of: "l.isTrusted && l.screenX && 0 != l.screenX && l.screenY && 0 != l.screenY &&", with: "")
+                    DispatchQueue.main.sync {
+                        self.webView.evaluateJavaScript(removedIsTrusted, completionHandler: { returnVal, error in
+                            print("hey");
+                        })
+                    }
+                }
+            }
+            print("js load \(response) \(data)");
+        })
+    }
+    
+   func makeURLSessionRequest(_ passedRequest: URLRequest, requestOptions: UrlSessionRequestOptions?, completionHandler: @escaping (URL?, Data?, HTTPURLResponse?, URLError?) -> Void) {
+//    let urlSession = URLSession(configuration: URLSessionConfiguration.default, delegate: self, delegateQueue: nil);
+       let handleResponse = { (data: Data?, response: URLResponse?, error: Error?) in
+           if error == nil {
+               let statusCode = (response as! HTTPURLResponse).statusCode
+               let headers = (response as! HTTPURLResponse).allHeaderFields
+
+               if 200 <= statusCode && statusCode < 400 {
+                   let returnedCookies = HTTPCookie.cookies(withResponseHeaderFields: headers as! [String: String], for: passedRequest.url!)
+
+
+                   if 200 <= statusCode && statusCode < 300 {
+                       completionHandler(passedRequest.url, data, response as? HTTPURLResponse ?? nil, nil)
+                   }
+               } else {
+                   print("Url request returned non success error code")
+                   completionHandler(passedRequest.url, data, response as? HTTPURLResponse ?? nil, nil)
+               }
+
+           } else {
+               print("Url request hit an error")
+               let defaultError = URLError(URLError.Code.init(rawValue: -100))
+               completionHandler(nil, nil, nil, error as? URLError ?? defaultError)
+           }
+       }
+
+    let task = URLSession.shared.dataTask(with: passedRequest, completionHandler:handleResponse)
+    task.resume()
+   }
+    
     func createWebviewWithConfiguration(_ webConfiguration: WKWebViewConfiguration) {
+        let config = SFSafariViewController.Configuration()
+        config.entersReaderIfAvailable = true
+//        let vc = SFSafariViewController(url: URL(string:"https://ebtedge.com")!, configuration: config)
+//        vc.view.frame = CGRect(x:0, y:300, width:view.frame.width, height:view.frame.height)
+//        view.addSubview(view)
+//        present(vc, animated: true)
+        
         self.webView = WKWebView(frame: .zero, configuration: webConfiguration)
         self.webView.uiDelegate = self
         self.webView.navigationDelegate = self
@@ -288,7 +421,7 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
             "fish": "3",
             "man": "Yes he is",
         ]
-        let request = self.createRequest(urlString: "https://google.com", method: "GET", params: params)
+        let request = self.createRequest(urlString: "https://cardholder.ebtedge.com/chp/index.html#?requestPage=register", method: "GET", params: params)
         
         // Set the user agent
 //        self.webView.customUserAgent = "this-is-so-fake"
@@ -309,7 +442,7 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
             [
                 "trigger": [
                     "url-filter": ".*",
-                    "resource-type": ["image", "media", "popup", "style-sheet"],
+                    "resource-type": ["script"],
                 ],
                 "action": [
                     "type": "block",
