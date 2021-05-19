@@ -277,7 +277,7 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
         self.webView = WKWebView(frame: .zero, configuration: webConfiguration)
         self.webView.uiDelegate = self
         self.webView.navigationDelegate = self
-        self.webView.frame = CGRect(x:0, y:300, width:view.frame.width, height:view.frame.width)
+        self.webView.frame = CGRect(x:0, y:300, width:view.frame.width, height:view.frame.height)
         self.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         view.addSubview(webView)
         
@@ -288,7 +288,7 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
             "fish": "3",
             "man": "Yes he is",
         ]
-        let request = self.createRequest(urlString: "https://f3571841.ngrok.io/cms/alex_test_get", method: "GET", params: params)
+        let request = self.createRequest(urlString: "https://google.com", method: "GET", params: params)
         
         // Set the user agent
 //        self.webView.customUserAgent = "this-is-so-fake"
