@@ -268,7 +268,7 @@ class ViewController: UIViewController, WKUIDelegate, WKNavigationDelegate {
         let webConfiguration = WKWebViewConfiguration()
         webConfiguration.applicationNameForUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36"
         
-        if (true) {
+        if (false) {
             WKContentRuleListStore.default()?.lookUpContentRuleList(forIdentifier: CONTENT_RULE_LIST_NAME, completionHandler: {contentRuleList, error in
                 if contentRuleList != nil {
                     webConfiguration.userContentController.add(contentRuleList!)
